@@ -206,11 +206,12 @@ internal static class DDSLoader
                         );
                         dguard.data = Task.FromResult(colors);
 
+                        var fileDataTask = dataTask;
                         var task = AsyncUtil
                             .LaunchMainThreadTask(async () =>
                             {
-                                var buffer = await dataTask;
-                                using var guard = new TaskArrayDisposeGuard(dataTask);
+                                var buffer = await fileDataTask;
+                                using var guard = new TaskArrayDisposeGuard(fileDataTask);
 
                                 var expected = width * height / 2 + 16 * 4;
                                 if (buffer.Length != expected)
@@ -259,11 +260,12 @@ internal static class DDSLoader
                             NativeArrayOptions.UninitializedMemory
                         );
 
+                        var fileDataTask = dataTask;
                         var task = AsyncUtil
                             .LaunchMainThreadTask(async () =>
                             {
-                                var buffer = await dataTask;
-                                using var guard = new TaskArrayDisposeGuard(dataTask);
+                                var buffer = await fileDataTask;
+                                using var guard = new TaskArrayDisposeGuard(fileDataTask);
 
                                 var expected = width * height + 256 * 4;
                                 if (buffer.Length != expected)
