@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using Unity.Burst.CompilerServices;
 
 namespace KSPTextureLoader.Utils;
 
@@ -44,6 +45,7 @@ internal struct FixedArray16<T>
         this = default;
     }
 
+    [IgnoreWarning(1370)]
     [MethodImpl(MethodImplOptions.NoInlining)]
     static T ThrowOutOfBoundsException(int index) =>
         throw new IndexOutOfRangeException($"index {index} is out of range");
