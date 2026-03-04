@@ -215,19 +215,19 @@ internal class TexturePreviewPopup : MonoBehaviour
 
     IEnumerator WaitForTexture()
     {
-        if (handle is null)
-            yield break;
-
-        using var guard = handle.Acquire();
-        yield return handle;
-
-        try
+        if (handle is not null)
         {
-            texture = handle.GetTexture();
-        }
-        catch (Exception e)
-        {
-            exception = e.ToString();
+            using var guard = handle.Acquire();
+            yield return handle;
+
+            try
+            {
+                texture = handle.GetTexture();
+            }
+            catch (Exception e)
+            {
+                exception = e.ToString();
+            }
         }
 
         if (texture != null)
