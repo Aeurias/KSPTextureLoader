@@ -83,6 +83,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     public abstract int MipCount { get; }
     public abstract TextureFormat Format { get; }
 
+    public string Name { get; set; } = "";
+
     protected CPUTexture2D() { }
 
     public abstract Color GetPixel(int x, int y, int mipLevel = 0);
@@ -166,6 +168,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             MipCount,
             GraphicsFormatUtility.GetGraphicsFormat(Format, false)
         );
+        if (Name is not null)
+            texture.name = Name;
         texture.LoadRawTextureData(GetRawTextureData<byte>());
         texture.Apply(false, !readable);
         return texture;
@@ -206,7 +210,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         var factory = new CPU.TextureHandleWrapper2D.Factory(handle);
         var texture = handle.GetTexture();
 
-        return Create(
+        var cpu = Create(
             factory,
             texture.GetRawTextureData<byte>(),
             texture.width,
@@ -214,6 +218,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             texture.mipmapCount,
             texture.format
         );
+        cpu.Name = texture.name;
+        return cpu;
     }
 
     /// <summary>
@@ -231,7 +237,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         {
             var factory = new CPU.UnityTexture2D.Factory(texture, owned);
 
-            return Create(
+            var cpu = Create(
                 factory,
                 texture.GetRawTextureData<byte>(),
                 texture.width,
@@ -239,6 +245,8 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
                 texture.mipmapCount,
                 texture.format
             );
+            cpu.Name = texture.name;
+            return cpu;
         }
         catch
         {
@@ -747,6 +755,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
                 src.graphicsFormat,
                 TextureUtils.InternalTextureCreationFlags.DontCreateSharedTextureData
             );
+            copy.name = src.name;
             copy.anisoLevel = src.anisoLevel;
 
             TextureUtils.MarkExternalTextureAsUnreadable(copy);
@@ -756,6 +765,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         else
         {
             var copy = Texture2D.Instantiate(src);
+            copy.name = src.name;
             if (!readable)
                 copy.Apply(false, true);
             return copy;
@@ -961,7 +971,12 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
     public override Texture2D CompileToTexture(bool readable = false)
     {
         if (CompileToTextureFunc is not null)
-            return CompileToTextureFunc(ref texture, readable);
+        {
+            var result = CompileToTextureFunc(ref texture, readable);
+            if (Name is not null)
+                result.name = Name;
+            return result;
+        }
 
         if (Format == default)
             throw new NotSupportedException(

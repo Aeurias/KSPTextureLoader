@@ -155,7 +155,9 @@ public partial class TextureLoader
             try
             {
                 jhandle.Complete();
-                handle.SetTexture(tcs.Task.Result);
+                var result = tcs.Task.Result;
+                result.Name = handle.Path;
+                handle.SetTexture(result);
                 yield break;
             }
             catch (NotSupportedException)
