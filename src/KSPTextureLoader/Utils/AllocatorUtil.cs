@@ -78,6 +78,24 @@ internal static class AllocatorUtil
         return array;
     }
 
+    /// <summary>
+    /// Release an array without actually deallocating its memory.
+    /// </summary>
+    ///
+    /// <remarks>
+    /// Use this when the allocation is transferred from a temporary is converted
+    /// from a temporary allocation to a permanent one.
+    /// </remarks>
+    internal static void Release<T>(NativeArray<T> array)
+        where T : unmanaged
+    {
+        if (array.m_AllocatorLabel != HGlobal)
+            return;
+
+        Interlocked.Add(ref allocMem, -array.Length);
+        condvar.Notify();
+    }
+
     struct DisposeJob<T>(NativeArray<T> array) : IJob
         where T : unmanaged
     {

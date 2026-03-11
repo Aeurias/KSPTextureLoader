@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using KSPTextureLoader.Async;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
 using Unity.Jobs;
@@ -138,32 +139,29 @@ public partial class TextureLoader
 
         if (extension == ".dds")
         {
-            var tcs = new TaskCompletionSource<CPUTexture2D>();
-            var ps = new TryLoadDDSCpuTextureParams
-            {
-                diskPath = diskPath,
-                tcs = tcs,
-                options = options,
-            };
-            var job = new TryLoadDDSCpuTextureJob(ps);
-            var jhandle = job.Schedule();
-            JobHandle.ScheduleBatchedJobs();
+            var task = AsyncUtil.LaunchMainThreadTask(() =>
+                DDSLoader.LoadCPUTexture2D(diskPath, options)
+            );
 
-            using (handle.WithCompleteHandler(new JobHandleCompleteHandler(jhandle)))
-                yield return new WaitUntil(() => jhandle.IsCompleted);
+            using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
+                yield return new WaitUntil(() => task.IsCompleted);
 
             try
             {
-                jhandle.Complete();
-                var result = tcs.Task.Result;
-                result.Name = handle.Path;
-                handle.SetTexture(result);
+                handle.SetTexture(task.Result);
                 yield break;
             }
-            catch (NotSupportedException)
+            catch (NotSupportedException e)
             {
                 // If the texture format is not supported then we fall back to
                 // a regular texture load.
+
+                if (Config.Instance.DebugMode == DebugLevel.Trace)
+                {
+                    Debug.Log(
+                        $"[KSPTextureLoader] Could not memory map CPU texture {handle.Path}: {e}"
+                    );
+                }
             }
         }
 
@@ -175,39 +173,5 @@ public partial class TextureLoader
         }
 
         handle.SetTexture(CPUTexture2D.Create(texHandle.Acquire()), texHandle.AssetBundle);
-    }
-
-    class TryLoadDDSCpuTextureParams
-    {
-        public string diskPath;
-        public TaskCompletionSource<CPUTexture2D> tcs;
-        public TextureLoadOptions options;
-    }
-
-    struct TryLoadDDSCpuTextureJob(TryLoadDDSCpuTextureParams ps) : IJob
-    {
-        public ObjectHandle<TryLoadDDSCpuTextureParams> ps = new(ps);
-
-        public void Execute()
-        {
-            using var pguard = this.ps;
-            var ps = pguard.Target;
-
-            var diskPath = ps.diskPath;
-            var tcs = ps.tcs;
-            var options = ps.options;
-
-            try
-            {
-                if (!DDSLoader.TryLoadDDSCPUTexture(diskPath, options.Linear, out var texture))
-                    throw new NotSupportedException();
-
-                tcs.SetResult(texture);
-            }
-            catch (Exception e)
-            {
-                tcs.TrySetException(e);
-            }
-        }
     }
 }

@@ -3,11 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using Experience.Effects;
 using KSPTextureLoader.Async;
 using KSPTextureLoader.Format;
 using KSPTextureLoader.Utils;
-using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -218,7 +216,7 @@ public partial class TextureLoader
         else if (extension == ".dds")
         {
             var task = AsyncUtil.LaunchMainThreadTask(() =>
-                (Task)DDSLoader.LoadDDSTextureAsync<T>(handle, options)
+                (Task)DDSLoader.LoadTexture<T>(handle, options)
             );
 
             using (handle.WithCompleteHandler(new TaskCompleteHandler(task)))
