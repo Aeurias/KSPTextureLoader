@@ -40,8 +40,6 @@ internal static unsafe class MemoryTexture2D
 internal sealed unsafe class MemoryTexture2D<TTexture> : CPUTexture2D<TTexture>
     where TTexture : ICPUTexture2D
 {
-    static readonly ProfilerMarker FreeMarker = new("MemoryTexture2D.FreeHGlobal");
-
     void* data;
     Allocator allocator;
 

@@ -192,9 +192,9 @@ internal class TexturePreviewPopup : MonoBehaviour
         return popup;
     }
 
-    public static TexturePreviewPopup Create(Texture texture, bool owned = true)
+    public static TexturePreviewPopup Create(Texture texture, bool owned = true, string name = null)
     {
-        var popup = Create(texture.name);
+        var popup = Create(name ?? texture.name);
         popup.texture = texture;
         popup.owned = owned;
         return popup;

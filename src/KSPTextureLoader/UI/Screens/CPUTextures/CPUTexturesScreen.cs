@@ -205,7 +205,7 @@ internal class CPUTexturePreviewButton : DebugScreenButton
             try
             {
                 var texture = handle.GetTexture().CompileToTexture();
-                TexturePreviewPopup.Create(texture, owned: true);
+                TexturePreviewPopup.Create(texture, owned: true, name: handle.Path);
             }
             catch (Exception e)
             {
