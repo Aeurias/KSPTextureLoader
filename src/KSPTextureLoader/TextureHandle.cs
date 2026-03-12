@@ -32,6 +32,7 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
     private ExceptionDispatchInfo exception;
     internal ICompleteHandler completeHandler;
     internal IEnumerator coroutine;
+    internal IDisposable externalResource;
 
     public bool IsComplete => coroutine is null;
     public bool IsError => exception is not null;
@@ -249,6 +250,13 @@ internal class TextureHandleImpl : IDisposable, ISetException, ICompleteHandler
         )
         {
             TextureLoader.textures.Remove(key);
+        }
+
+        if (externalResource is not null)
+        {
+            var resource = externalResource;
+            externalResource = null;
+            AsyncUtil.LaunchMainThreadTask(resource.Dispose);
         }
 
         if (texture == null)

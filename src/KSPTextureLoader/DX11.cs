@@ -145,6 +145,7 @@ internal static class DX11
             var dx11texture = await task;
             texture.UpdateExternalTexture(dx11texture.NativePointer);
             texguard.task = null;
+            handle.externalResource = dx11texture;
 
             uguard.Clear();
             await copy;
@@ -161,6 +162,7 @@ internal static class DX11
                 dx11texture.NativePointer
             );
             texguard.task = null;
+            handle.externalResource = dx11texture;
         }
 
         // Unity doesn't configure anisotropic filtering for external textures
