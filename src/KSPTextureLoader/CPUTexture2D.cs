@@ -178,6 +178,12 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
 
     public virtual void Dispose() { }
 
+    /// <summary>
+    /// Called before accessing any texture data. This allows derived classes
+    /// to check that the backing data is still valid before we access it.
+    /// </summary>
+    protected virtual void Validate() { }
+
     #region Create Methods
     internal interface ICPUTexture2DFactory
     {
@@ -959,23 +965,36 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
     public sealed override TextureFormat Format => texture.Format;
     public TTexture Texture => texture;
 
-    public sealed override Color GetPixel(int x, int y, int mipLevel = 0) =>
-        texture.GetPixel(x, y, mipLevel);
+    public sealed override Color GetPixel(int x, int y, int mipLevel = 0)
+    {
+        Validate();
+        return texture.GetPixel(x, y, mipLevel);
+    }
 
-    public sealed override Color32 GetPixel32(int x, int y, int mipLevel = 0) =>
-        texture.GetPixel32(x, y, mipLevel);
+    public sealed override Color32 GetPixel32(int x, int y, int mipLevel = 0)
+    {
+        Validate();
+        return texture.GetPixel32(x, y, mipLevel);
+    }
 
-    public sealed override Color GetPixelBilinear(float u, float v, int mipLevel = 0) =>
-        texture.GetPixelBilinear(u, v, mipLevel);
+    public sealed override Color GetPixelBilinear(float u, float v, int mipLevel = 0)
+    {
+        Validate();
+        return texture.GetPixelBilinear(u, v, mipLevel);
+    }
 
-    public sealed override NativeArray<byte> GetRawTextureData() =>
-        texture.GetRawTextureData<byte>();
+    public sealed override NativeArray<byte> GetRawTextureData()
+    {
+        Validate();
+        return texture.GetRawTextureData<byte>();
+    }
 
     public sealed override NativeArray<Color> GetPixels(
         int mipLevel = 0,
         Allocator allocator = Allocator.Temp
     )
     {
+        Validate();
         if (GetPixelsFunc is not null)
             return GetPixelsFunc(ref texture, mipLevel, allocator);
         return base.GetPixels(mipLevel, allocator);
@@ -986,6 +1005,7 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
         Allocator allocator = Allocator.Temp
     )
     {
+        Validate();
         if (GetPixels32Func is not null)
             return GetPixels32Func(ref texture, mipLevel, allocator);
         return base.GetPixels32(mipLevel, allocator);
@@ -993,6 +1013,7 @@ public class CPUTexture2D<TTexture>(TTexture texture) : CPUTexture2D
 
     public override Texture2D CompileToTexture(bool readable = false)
     {
+        Validate();
         if (CompileToTextureFunc is not null)
         {
             var result = CompileToTextureFunc(ref texture, readable);

@@ -52,6 +52,12 @@ internal class UnityTexture2D : CPUTexture2D
         texture = null;
     }
 
+    protected override void Validate()
+    {
+        if (texture.m_CachedPtr == IntPtr.Zero)
+            throw new InvalidOperationException("Backing texture has been destroyed");
+    }
+
     internal readonly struct Factory(Texture2D unity, bool owned = true) : ICPUTexture2DFactory
     {
         public CPUTexture2D CreateTexture2D<T>(T texture)
