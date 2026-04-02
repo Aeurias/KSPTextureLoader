@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.30
+### Added
+* Cubemaps are now supported for native uploads on DX11.
+
+### Fixed
+* Fixed a whole bunch of bugs with cubemap loading.
+* Fixed a bug where CPUTexture2Ds would access data from a freed Texture2D
+  under certain conditions.
+
+### Changed
+* Texture files larger than 2GB are now supported, though there are still
+  limitations around Texture2Ds larger than 2GB.
+* CPUTexture2Ds using kopernicus palette formats no longer decompress them
+  to RGBA32.
+
 ## v1.0.29
 ### Fixed
 * Fixed a handle leak where CPU texture handles were not immediately disposing
