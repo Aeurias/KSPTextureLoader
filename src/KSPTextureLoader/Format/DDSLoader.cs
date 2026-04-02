@@ -809,6 +809,25 @@ internal static class DDSLoader
                     "Only 2D CPU textures are supported at this time"
                 );
 
+            if (metadata.paletteType != KopernicusPaletteType.None)
+            {
+                var factory = new CPU.MemoryMappedTexture2D.Factory(mmap.file, mmap.accessor);
+                var texture = metadata.paletteType switch
+                {
+                    KopernicusPaletteType.Palette4 => factory.CreateTexture2D(
+                        new CPUTexture2D.KopernicusPalette4(data, metadata.width, metadata.height)
+                    ),
+                    KopernicusPaletteType.Palette8 => factory.CreateTexture2D(
+                        new CPUTexture2D.KopernicusPalette8(data, metadata.width, metadata.height)
+                    ),
+                    _ => throw new InvalidOperationException(
+                        $"Unknown palette type: {metadata.paletteType}"
+                    ),
+                };
+                mmapGuard.info = null;
+                return texture;
+            }
+
             var format = GraphicsFormatUtility.GetTextureFormat(metadata.format);
 
             var dataNative = data.AsNativeArray();
