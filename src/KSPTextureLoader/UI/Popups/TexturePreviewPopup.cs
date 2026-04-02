@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using KSP.UI.Screens.DebugToolbar;
 using KSPTextureLoader.UI;
 using TMPro;
@@ -12,9 +13,24 @@ internal class TexturePreviewPopup : MonoBehaviour
 {
     static GameObject _prefab;
 
+    // 4x3 cross layout matching ConvertTexture2dToCubemap.
+    // null entries are empty cells.
+    static readonly CubemapFace?[,] CrossLayout =
+    {
+        { null, null, CubemapFace.NegativeY, null },
+        {
+            CubemapFace.NegativeZ,
+            CubemapFace.NegativeX,
+            CubemapFace.PositiveZ,
+            CubemapFace.PositiveX,
+        },
+        { null, null, CubemapFace.PositiveY, null },
+    };
+
     bool owned = true;
     TextureHandle handle;
     Texture texture;
+    Texture2D[] cubemapFaceTextures;
     string exception;
 
     [SerializeField]
@@ -28,6 +44,23 @@ internal class TexturePreviewPopup : MonoBehaviour
 
     [SerializeField]
     GameObject textureContainer;
+
+    [SerializeField]
+    GameObject cubemapGrid;
+
+    [SerializeField]
+    RawImage[] cubemapFaceImages;
+
+    // Order matches the cross layout iterated row-by-row, skipping empty cells.
+    static readonly CubemapFace[] CubemapFaceOrder =
+    {
+        CubemapFace.NegativeY,
+        CubemapFace.NegativeZ,
+        CubemapFace.NegativeX,
+        CubemapFace.PositiveZ,
+        CubemapFace.PositiveX,
+        CubemapFace.PositiveY,
+    };
 
     [SerializeField]
     GameObject errorScrollView;
@@ -82,10 +115,86 @@ internal class TexturePreviewPopup : MonoBehaviour
         popup.aspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
         popup.aspectFitter.aspectRatio = 1f;
 
+        // Cubemap cross grid (hidden by default)
+        BuildCubemapGrid(popup, contentArea);
+
         // Scrollable error area (hidden by default)
         BuildErrorScrollView(popup, contentArea);
 
         _prefab = window;
+    }
+
+    static void BuildCubemapGrid(TexturePreviewPopup popup, Transform contentArea)
+    {
+        int rows = CrossLayout.GetLength(0);
+        int cols = CrossLayout.GetLength(1);
+
+        var gridGo = new GameObject("CubemapGrid", typeof(RectTransform));
+        gridGo.transform.SetParent(contentArea, false);
+        gridGo.SetActive(false);
+        popup.cubemapGrid = gridGo;
+
+        var gridLayoutElem = gridGo.AddComponent<LayoutElement>();
+        gridLayoutElem.flexibleWidth = 1f;
+        gridLayoutElem.flexibleHeight = 1f;
+
+        var gridVlg = gridGo.AddComponent<VerticalLayoutGroup>();
+        gridVlg.childControlWidth = true;
+        gridVlg.childControlHeight = true;
+        gridVlg.childForceExpandWidth = true;
+        gridVlg.childForceExpandHeight = true;
+        gridVlg.spacing = 2f;
+
+        var images = new List<RawImage>();
+
+        for (int row = 0; row < rows; row++)
+        {
+            var rowGo = new GameObject($"Row{row}", typeof(RectTransform));
+            rowGo.transform.SetParent(gridGo.transform, false);
+
+            var rowHlg = rowGo.AddComponent<HorizontalLayoutGroup>();
+            rowHlg.childControlWidth = true;
+            rowHlg.childControlHeight = true;
+            rowHlg.childForceExpandWidth = true;
+            rowHlg.childForceExpandHeight = true;
+            rowHlg.spacing = 2f;
+
+            var rowLayout = rowGo.AddComponent<LayoutElement>();
+            rowLayout.flexibleWidth = 1f;
+            rowLayout.flexibleHeight = 1f;
+
+            for (int col = 0; col < cols; col++)
+            {
+                var entry = CrossLayout[row, col];
+
+                var cellGo = new GameObject(
+                    entry.HasValue ? $"Cell_{entry.Value}" : $"Cell_Empty",
+                    typeof(RectTransform)
+                );
+                cellGo.transform.SetParent(rowGo.transform, false);
+
+                var cellLayout = cellGo.AddComponent<LayoutElement>();
+                cellLayout.flexibleWidth = 1f;
+                cellLayout.flexibleHeight = 1f;
+
+                if (!entry.HasValue)
+                    continue;
+
+                var imgGo = new GameObject("FaceImage", typeof(RectTransform));
+                imgGo.transform.SetParent(cellGo.transform, false);
+
+                var faceImage = imgGo.AddComponent<RawImage>();
+                faceImage.enabled = false;
+
+                var fitter = imgGo.AddComponent<AspectRatioFitter>();
+                fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+                fitter.aspectRatio = 1f;
+
+                images.Add(faceImage);
+            }
+        }
+
+        popup.cubemapFaceImages = images.ToArray();
     }
 
     static void BuildErrorScrollView(TexturePreviewPopup popup, Transform contentArea)
@@ -233,9 +342,11 @@ internal class TexturePreviewPopup : MonoBehaviour
         if (texture != null)
         {
             infoLabel.text = $"{texture.width}x{texture.height} {texture.graphicsFormat}";
-            rawImage.texture = texture;
-            rawImage.enabled = true;
-            aspectFitter.aspectRatio = (float)texture.width / texture.height;
+
+            if (texture is Cubemap cubemap)
+                ShowCubemap(cubemap);
+            else
+                ShowTexture(texture);
         }
         else if (exception != null)
         {
@@ -246,8 +357,40 @@ internal class TexturePreviewPopup : MonoBehaviour
         }
     }
 
+    void ShowTexture(Texture tex)
+    {
+        rawImage.texture = tex;
+        rawImage.enabled = true;
+        aspectFitter.aspectRatio = (float)tex.width / tex.height;
+    }
+
+    void ShowCubemap(Cubemap cubemap)
+    {
+        textureContainer.SetActive(false);
+
+        cubemapFaceTextures = new Texture2D[cubemapFaceImages.Length];
+        for (int i = 0; i < cubemapFaceImages.Length; i++)
+        {
+            var faceTex = TextureUtils.ExtractCubemapFace(cubemap, CubemapFaceOrder[i]);
+            cubemapFaceTextures[i] = faceTex;
+            cubemapFaceImages[i].texture = faceTex;
+            cubemapFaceImages[i].enabled = true;
+        }
+
+        cubemapGrid.SetActive(true);
+    }
+
     void OnDestroy()
     {
+        if (cubemapFaceTextures != null)
+        {
+            foreach (var faceTex in cubemapFaceTextures)
+            {
+                if (faceTex != null)
+                    Texture.Destroy(faceTex);
+            }
+        }
+
         if (owned)
         {
             if (handle is not null)
@@ -256,6 +399,7 @@ internal class TexturePreviewPopup : MonoBehaviour
                 Texture.Destroy(texture);
         }
 
+        cubemapFaceTextures = null;
         handle = null;
         texture = null;
     }

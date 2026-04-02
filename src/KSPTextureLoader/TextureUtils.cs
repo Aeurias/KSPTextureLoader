@@ -449,6 +449,24 @@ internal static class TextureUtils
         return tzcnt;
     }
 
+    /// <summary>
+    /// Extracts a single face from a cubemap as a Texture2D using GPU-side copy.
+    /// Works on non-readable cubemaps.
+    /// </summary>
+    internal static Texture2D ExtractCubemapFace(Cubemap src, CubemapFace face)
+    {
+        var flags = TextureCreationFlags.None;
+        if (src.mipmapCount > 1)
+            flags |= TextureCreationFlags.MipChain;
+
+        var tex = new Texture2D(src.width, src.height, src.graphicsFormat, flags)
+        {
+            name = $"{src.name} ({face})",
+        };
+        Graphics.CopyTexture(src, (int)face, tex, 0);
+        return tex;
+    }
+
     internal static Cubemap ConvertTexture2dToCubemap(Texture2D src)
     {
         var cubedim = src.width / 4;
