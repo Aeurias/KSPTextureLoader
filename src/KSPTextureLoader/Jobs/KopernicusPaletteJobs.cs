@@ -1,4 +1,5 @@
 using KSPTextureLoader.Burst;
+using KSPTextureLoader.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -13,8 +14,7 @@ namespace KSPTextureLoader.Jobs;
 [BurstCompile(FloatMode = FloatMode.Fast)]
 struct DecodeKopernicusPalette4bitJob : IJobParallelForBatch
 {
-    [ReadOnly]
-    public NativeArray<byte> data;
+    public LargeNativeArray<byte> data;
 
     [WriteOnly]
     [NativeDisableParallelForRestriction]
@@ -22,7 +22,7 @@ struct DecodeKopernicusPalette4bitJob : IJobParallelForBatch
 
     public readonly unsafe void Execute(int start, int count)
     {
-        Color32* palette = (Color32*)this.data.GetUnsafeReadOnlyPtr();
+        Color32* palette = (Color32*)this.data.GetUnsafePtr();
         Color32* colors = (Color32*)this.colors.GetUnsafePtr();
         byte* data = (byte*)palette + sizeof(Color32) * 16;
 
@@ -42,15 +42,14 @@ struct DecodeKopernicusPalette4bitJob : IJobParallelForBatch
 [BurstCompile(FloatMode = FloatMode.Fast)]
 struct DecodeKopernicusPalette8bitJob : IJobParallelForBatch
 {
-    [ReadOnly]
-    public NativeArray<byte> data;
+    public LargeNativeArray<byte> data;
 
     [WriteOnly]
     public NativeSlice<Color32> colors;
 
     public readonly unsafe void Execute(int start, int count)
     {
-        Color32* palette = (Color32*)this.data.GetUnsafeReadOnlyPtr();
+        Color32* palette = (Color32*)this.data.GetUnsafePtr();
         Color32* colors = (Color32*)this.colors.GetUnsafePtr();
         byte* data = (byte*)palette + sizeof(Color32) * 256;
 

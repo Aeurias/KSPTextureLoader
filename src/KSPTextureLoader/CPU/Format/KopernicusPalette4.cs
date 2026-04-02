@@ -117,7 +117,7 @@ partial class CPUTexture2D
                 allocator,
                 NativeArrayOptions.UninitializedMemory
             );
-            new DecodeKopernicusPalette4bitJob { data = this.data.AsNativeArray(), colors = result }
+            new DecodeKopernicusPalette4bitJob { data = this.data, colors = result }
                 .ScheduleBatch(pixelCount / 2, 4096)
                 .Complete();
             return result;
@@ -137,7 +137,7 @@ partial class CPUTexture2D
             );
             var job = new DecodeKopernicusPalette4bitJob
             {
-                data = GetRawTextureData<byte>().GetSubArray(0, PaletteBytes + Width * Height / 2),
+                data = this.data.GetSubArray(0, PaletteBytes + Width * Height / 2),
                 colors = data,
             };
             var handle = job.ScheduleBatch(Width * Height / 2, 4096);

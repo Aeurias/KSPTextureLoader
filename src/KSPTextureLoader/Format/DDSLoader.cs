@@ -9,6 +9,7 @@ using KSPTextureLoader.Jobs;
 using KSPTextureLoader.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -80,6 +81,13 @@ internal static class DDSLoader
     #endregion
 
     #region ReadTextureMetadata
+    internal enum KopernicusPaletteType
+    {
+        None,
+        Palette4,
+        Palette8,
+    }
+
     internal struct TextureMetadata
     {
         public Task<LargeNativeArray<byte>> data;
@@ -90,6 +98,7 @@ internal static class DDSLoader
         public int arraySize;
         public int mipCount;
         public DDSTextureType type;
+        public KopernicusPaletteType paletteType;
     }
 
     internal static Task<TextureMetadata> GetTextureMetadata<T>(
@@ -116,6 +125,7 @@ internal static class DDSLoader
             if (mipCount == 0)
                 mipCount = 1;
             var type = DDSTextureType.Texture2D;
+            var paletteType = KopernicusPaletteType.None;
             var flags = (DDS_HEADER_FLAGS)header.dwFlags;
 
             if (header10 is not null)
@@ -192,158 +202,65 @@ internal static class DDSLoader
 
                 if (format == GraphicsFormat.None)
                 {
-                    format = GraphicsFormatUtility.GetGraphicsFormat(TextureFormat.RGBA32, false);
-
-                    // Try using Kopernicus' special palette based formats
+                    // Try using Kopernicus' special palette based formats.
+                    // Pass through the raw palette data; LoadTexture will decode
+                    // it to RGBA32 before uploading to the GPU.
                     if (header.ddspf.dwRGBBitCount == 4)
                     {
-                        mipCount = 1;
-                        arraySize = 1;
-                        depth = 1;
+                        var expected = width * height / 2 + 16 * 4;
+                        if (info.fileLength != expected)
+                            throw new Exception(
+                                "Unsupported DDS file: no recognized format (tried 4bpp palette image, but file size was not correct)"
+                            );
 
-                        var colors = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
-                            UnsafeUtility.SizeOf<Color32>() * width * height,
-                            NativeArrayOptions.UninitializedMemory
-                        );
-                        dguard.data = Task.FromResult(
-                            LargeNativeArray<byte>.FromNativeArray(colors)
-                        );
-
-                        var fileDataTask = dataTask;
-                        var task = AsyncUtil
-                            .LaunchMainThreadTask(async () =>
-                            {
-                                var buffer = await fileDataTask;
-                                using var guard = new TaskArrayDisposeGuard(fileDataTask);
-
-                                var expected = width * height / 2 + 16 * 4;
-                                if (buffer.Length != expected)
-                                {
-                                    throw new Exception(
-                                        "Unsupported DDS file: no recognized format (tried 4bpp palette image, but file size was not correct)"
-                                    );
-                                }
-
-                                var job = new DecodeKopernicusPalette4bitJob
-                                {
-                                    data = buffer.AsNativeArray(),
-                                    colors = colors.Slice().SliceConvert<Color32>(),
-                                };
-                                var handle = job.ScheduleBatch(width * height / 2, 4096);
-                                buffer.DisposeExt(handle);
-                                guard.data = null;
-
-                                return AsyncUtil.WaitFor(handle);
-                            })
-                            .Unwrap();
-
-                        dataTask = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                await task;
-                                return LargeNativeArray<byte>.FromNativeArray(colors);
-                            }
-                            catch
-                            {
-                                colors.DisposeExt();
-                                throw;
-                            }
-                        });
-                        dguard.data = dataTask;
+                        paletteType = KopernicusPaletteType.Palette4;
                     }
                     else if (header.ddspf.dwRGBBitCount == 8)
                     {
-                        mipCount = 1;
-                        arraySize = 1;
-                        depth = 1;
+                        var expected = width * height + 256 * 4;
+                        if (info.fileLength != expected)
+                            throw new Exception(
+                                "Unsupported DDS file: no recognized format (tried 8bpp palette image, but file size was not correct)"
+                            );
 
-                        var colors = AllocatorUtil.CreateNativeArrayHGlobal<byte>(
-                            UnsafeUtility.SizeOf<Color32>() * width * height,
-                            NativeArrayOptions.UninitializedMemory
-                        );
-
-                        var fileDataTask = dataTask;
-                        var task = AsyncUtil
-                            .LaunchMainThreadTask(async () =>
-                            {
-                                var buffer = await fileDataTask;
-                                using var guard = new TaskArrayDisposeGuard(fileDataTask);
-
-                                var expected = width * height + 256 * 4;
-                                if (buffer.Length != expected)
-                                {
-                                    throw new Exception(
-                                        "Unsupported DDS file: no recognized format (tried 4bpp palette image, but file size was not correct)"
-                                    );
-                                }
-
-                                var job = new DecodeKopernicusPalette8bitJob
-                                {
-                                    data = buffer.AsNativeArray(),
-                                    colors = colors.Slice().SliceConvert<Color32>(),
-                                };
-                                var handle = job.ScheduleBatch(width * height / 2, 4096);
-                                buffer.DisposeExt(handle);
-                                guard.data = null;
-
-                                return AsyncUtil.WaitFor(handle);
-                            })
-                            .Unwrap();
-
-                        dataTask = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                await task;
-                                return LargeNativeArray<byte>.FromNativeArray(colors);
-                            }
-                            catch
-                            {
-                                colors.DisposeExt();
-                                throw;
-                            }
-                        });
-                        dguard.data = dataTask;
+                        paletteType = KopernicusPaletteType.Palette8;
                     }
                     else
                     {
                         throw new Exception("Unsupported DDS file: no recognized format");
                     }
                 }
+
+                if (flags.HasFlag(DDS_HEADER_FLAGS.DEPTH))
+                {
+                    type = DDSTextureType.Texture3D;
+                }
                 else
                 {
-                    if (flags.HasFlag(DDS_HEADER_FLAGS.DEPTH))
+                    if (header.dwCaps2.HasFlag(DDSPixelFormatCaps2.CUBEMAP))
                     {
-                        type = DDSTextureType.Texture3D;
+                        const DDSPixelFormatCaps2 CUBEMAP_ALLFACES =
+                            DDSPixelFormatCaps2.CUBEMAP_POSITIVEX
+                            | DDSPixelFormatCaps2.CUBEMAP_NEGATIVEX
+                            | DDSPixelFormatCaps2.CUBEMAP_POSITIVEY
+                            | DDSPixelFormatCaps2.CUBEMAP_NEGATIVEY
+                            | DDSPixelFormatCaps2.CUBEMAP_POSITIVEZ
+                            | DDSPixelFormatCaps2.CUBEMAP_NEGATIVEZ;
+
+                        if (!header.dwCaps2.HasFlag(CUBEMAP_ALLFACES))
+                            throw new Exception(
+                                "Unsupported DDS file: cubemap textures must have all cubemap faces"
+                            );
+
+                        arraySize = 6;
+                        type = DDSTextureType.Cubemap;
                     }
-                    else
-                    {
-                        if (header.dwCaps2.HasFlag(DDSPixelFormatCaps2.CUBEMAP))
-                        {
-                            const DDSPixelFormatCaps2 CUBEMAP_ALLFACES =
-                                DDSPixelFormatCaps2.CUBEMAP_POSITIVEX
-                                | DDSPixelFormatCaps2.CUBEMAP_NEGATIVEX
-                                | DDSPixelFormatCaps2.CUBEMAP_POSITIVEY
-                                | DDSPixelFormatCaps2.CUBEMAP_NEGATIVEY
-                                | DDSPixelFormatCaps2.CUBEMAP_POSITIVEZ
-                                | DDSPixelFormatCaps2.CUBEMAP_NEGATIVEZ;
 
-                            if (!header.dwCaps2.HasFlag(CUBEMAP_ALLFACES))
-                                throw new Exception(
-                                    "Unsupported DDS file: cubemap textures must have all cubemap faces"
-                                );
-
-                            arraySize = 6;
-                            type = DDSTextureType.Cubemap;
-                        }
-
-                        depth = 1;
-                    }
+                    depth = 1;
                 }
             }
 
-            if (options.Linear is bool linear)
+            if (paletteType == KopernicusPaletteType.None && options.Linear is bool linear)
             {
                 var tformat = GraphicsFormatUtility.GetTextureFormat(format);
                 format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !linear);
@@ -360,6 +277,7 @@ internal static class DDSLoader
                 arraySize = arraySize,
                 mipCount = mipCount,
                 type = type,
+                paletteType = paletteType,
             };
         });
     }
@@ -426,6 +344,20 @@ internal static class DDSLoader
         using var dguard = new TaskArrayDisposeGuard(dataTask);
         var metadata = await metadataTask;
 
+        if (metadata.paletteType != KopernicusPaletteType.None)
+        {
+            dataTask = DecodePaletteToRGBA32(metadata, dataTask);
+            dguard.data = dataTask;
+
+            var format = GraphicsFormat.R8G8B8A8_SRGB;
+            if (options.Linear is bool linear)
+            {
+                var tformat = GraphicsFormatUtility.GetTextureFormat(format);
+                format = GraphicsFormatUtility.GetGraphicsFormat(tformat, isSRGB: !linear);
+            }
+            metadata.format = format;
+        }
+
         switch (metadata.type)
         {
             case DDSTextureType.Texture2D:
@@ -462,6 +394,51 @@ internal static class DDSLoader
             default:
                 throw new NotImplementedException($"Unknown texture type {metadata.type}");
         }
+    }
+
+    static Task<LargeNativeArray<byte>> DecodePaletteToRGBA32(
+        TextureMetadata metadata,
+        Task<LargeNativeArray<byte>> rawDataTask
+    )
+    {
+        int width = metadata.width;
+        int height = metadata.height;
+        var paletteType = metadata.paletteType;
+        return Task.Run(async () =>
+        {
+            using var rawGuard = new TaskArrayDisposeGuard(rawDataTask);
+            var rawData = await rawDataTask;
+            var colors = AllocatorUtil.CreateNativeArrayHGlobal<Color32>(
+                width * height,
+                NativeArrayOptions.UninitializedMemory
+            );
+            using var colorsGuard = new NativeArrayGuard<Color32>(colors);
+            await await AsyncUtil.LaunchMainThreadTask(async () =>
+            {
+                JobHandle jobHandle = paletteType switch
+                {
+                    KopernicusPaletteType.Palette4 => new DecodeKopernicusPalette4bitJob
+                    {
+                        data = rawData.GetSubArray(0, 16 * 4 + width * height / 2),
+                        colors = colors,
+                    }.ScheduleBatch(width * height / 2, 4096),
+                    KopernicusPaletteType.Palette8 => new DecodeKopernicusPalette8bitJob
+                    {
+                        data = rawData.GetSubArray(0, 256 * 4 + width * height),
+                        colors = colors,
+                    }.ScheduleBatch(width * height, 4096),
+                    _ => throw new InvalidOperationException(
+                        $"Unknown palette type: {paletteType}"
+                    ),
+                };
+                JobHandle.ScheduleBatchedJobs();
+                return AsyncUtil.WaitFor(jobHandle);
+            });
+            colorsGuard.array = default;
+            return LargeNativeArray<byte>.FromNativeArray(
+                colors.Reinterpret<byte>(UnsafeUtility.SizeOf<Color32>())
+            );
+        });
     }
 
     static readonly ProfilerMarker LoadTextureDataMarker = new("LoadTextureData");
