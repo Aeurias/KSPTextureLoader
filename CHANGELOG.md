@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.0.31
+### Fixed
+* Fixed an issue where DDS cubemaps were being loaded incorrectly.
+* Fixed an issue where profiling spans would sometimes not be closed.
+
 ## v1.0.30
 ### Added
 * Cubemaps are now supported for native uploads on DX11.
