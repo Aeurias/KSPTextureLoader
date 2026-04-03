@@ -117,7 +117,7 @@ internal static class DX11
             return new Direct3D11.Texture2D(device, desc, boxes);
         });
 
-        using var texguard = new Dx11AsyncTextureGuard(task);
+        using var texguard = new AsyncDisposeGuard<Direct3D11.Texture2D>(task);
         dguard.AddDependency(task);
 
         UnityEngine.Texture2D texture = null;
@@ -229,19 +229,34 @@ internal static class DX11
             return new Direct3D11.Texture2D(device, desc, boxes);
         });
 
-        using var texguard = new Dx11AsyncTextureGuard(task);
+        var srvTask = Task.Run(async () =>
+        {
+            var texture = await task;
+            var desc = new ShaderResourceViewDescription
+            {
+                Format = dx11format,
+                Dimension = SharpDX.Direct3D.ShaderResourceViewDimension.TextureCube,
+                TextureCube = new() { MostDetailedMip = 0, MipLevels = -1 },
+            };
+            return new ShaderResourceView(device, texture, desc);
+        });
+
+        using var texguard = new AsyncDisposeGuard<Direct3D11.Texture2D>(task);
+        using var srvguard = new AsyncDisposeGuard<ShaderResourceView>(srvTask);
         dguard.AddDependency(task);
         dguard.Dispose();
 
+        var dx11srv = await srvTask;
         var dx11texture = await task;
         var cubemap = TextureUtils.CreateExternalCubemap(
             metadata.width,
             metadata.mipCount,
             metadata.format,
-            dx11texture.NativePointer
+            dx11srv.NativePointer
         );
         texguard.task = null;
-        handle.externalResource = dx11texture;
+        srvguard.task = null;
+        handle.externalResource = new SRVResource { srv = dx11srv, texture = dx11texture };
 
         switch (Texture.anisotropicFiltering)
         {
@@ -455,9 +470,10 @@ internal static class DX11
         }
     }
 
-    class Dx11AsyncTextureGuard(Task<Direct3D11.Texture2D> task = null) : IDisposable
+    class AsyncDisposeGuard<T>(Task<T> task = null) : IDisposable
+        where T : IDisposable
     {
-        public Task<Direct3D11.Texture2D> task = task;
+        public Task<T> task = task;
 
         public void Dispose()
         {
@@ -465,10 +481,24 @@ internal static class DX11
             {
                 try
                 {
-                    var texture = await task;
-                    texture.Dispose();
+                    (await task).Dispose();
                 }
                 catch { }
+            });
+        }
+    }
+
+    class SRVResource : IDisposable
+    {
+        public IDisposable texture;
+        public IDisposable srv;
+
+        public void Dispose()
+        {
+            Task.Run(() =>
+            {
+                using var texture = this.texture;
+                using var srv = this.srv;
             });
         }
     }
