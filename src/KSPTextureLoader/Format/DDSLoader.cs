@@ -836,7 +836,6 @@ internal static class DDSLoader
 
             var format = GraphicsFormatUtility.GetTextureFormat(metadata.format);
 
-            var dataNative = data.AsNativeArray();
             bool isSame;
             unsafe
             {
@@ -848,7 +847,7 @@ internal static class DDSLoader
                 var texture = CPUTexture2D.Create(
                     mmap.file,
                     mmap.accessor,
-                    dataNative,
+                    data,
                     metadata.width,
                     metadata.height,
                     metadata.mipCount,
@@ -860,7 +859,7 @@ internal static class DDSLoader
             else
             {
                 return CPUTexture2D.Create(
-                    dataNative,
+                    data,
                     metadata.width,
                     metadata.height,
                     metadata.mipCount,

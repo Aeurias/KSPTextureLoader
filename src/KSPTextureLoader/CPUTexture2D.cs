@@ -272,7 +272,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     /// <param name="mipCount">The number of mipmaps for this texture.</param>
     /// <param name="format">The <see cref="TextureFormat"/> of <paramref name="data"/>.</param>
     /// <returns></returns>
-    public static unsafe CPUTexture2D Create(
+    public static CPUTexture2D Create(
         NativeArray<byte> data,
         int width,
         int height,
@@ -280,15 +280,34 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
         TextureFormat format
     )
     {
-        var factory = new MemoryTexture2D.Factory(data.GetUnsafePtr(), data.m_AllocatorLabel);
         return Create(
-            factory,
             LargeNativeArray<byte>.FromNativeArray(data),
             width,
             height,
             mipCount,
             format
         );
+    }
+
+    /// <summary>
+    /// Create a new CPUTexture2D from a native array containing texture data.
+    /// </summary>
+    /// <param name="data">The data backing this texture.</param>
+    /// <param name="width">The width of the the texture.</param>
+    /// <param name="height">The height of the texture.</param>
+    /// <param name="mipCount">The number of mipmaps for this texture.</param>
+    /// <param name="format">The <see cref="TextureFormat"/> of <paramref name="data"/>.</param>
+    /// <returns></returns>
+    internal static unsafe CPUTexture2D Create(
+        LargeNativeArray<byte> data,
+        int width,
+        int height,
+        int mipCount,
+        TextureFormat format
+    )
+    {
+        var factory = new MemoryTexture2D.Factory(data.GetUnsafePtr(), data.Allocator);
+        return Create(factory, data, width, height, mipCount, format);
     }
 
     /// <summary>
@@ -306,7 +325,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
     internal static CPUTexture2D Create(
         MemoryMappedFile mmf,
         MemoryMappedViewAccessor accessor,
-        NativeArray<byte> data,
+        LargeNativeArray<byte> data,
         int width,
         int height,
         int mipCount,
@@ -319,14 +338,7 @@ public abstract partial class CPUTexture2D : ICPUTexture2D, ICompileToTexture, I
             throw new ArgumentNullException(nameof(accessor));
 
         var factory = new CPU.MemoryMappedTexture2D.Factory(mmf, accessor);
-        return Create(
-            factory,
-            LargeNativeArray<byte>.FromNativeArray(data),
-            width,
-            height,
-            mipCount,
-            format
-        );
+        return Create(factory, data, width, height, mipCount, format);
     }
 
     static CPUTexture2D Create<F>(
