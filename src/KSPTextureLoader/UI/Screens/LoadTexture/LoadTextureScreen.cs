@@ -63,7 +63,7 @@ internal class LoadTextureScreenContent : MonoBehaviour
     internal void LoadTexture()
     {
         var path = texturePathInput.text;
-        using var handle = TextureLoader.LoadTexture<Texture2D>(path, BuildOptions());
+        using var handle = TextureLoader.LoadTexture<Texture>(path, BuildOptions());
         TexturePreviewPopup.Create(handle);
     }
 
