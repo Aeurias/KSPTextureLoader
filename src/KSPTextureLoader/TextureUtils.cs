@@ -467,6 +467,24 @@ internal static class TextureUtils
         return tex;
     }
 
+    /// <summary>
+    /// Extracts a single slice from a Texture2DArray as a Texture2D using GPU-side copy.
+    /// Works on non-readable array textures.
+    /// </summary>
+    internal static Texture2D ExtractArraySlice(Texture2DArray src, int slice)
+    {
+        var flags = TextureCreationFlags.None;
+        if (src.mipmapCount > 1)
+            flags |= TextureCreationFlags.MipChain;
+
+        var tex = new Texture2D(src.width, src.height, src.graphicsFormat, flags)
+        {
+            name = $"{src.name} [{slice}]",
+        };
+        Graphics.CopyTexture(src, slice, tex, 0);
+        return tex;
+    }
+
     internal static Cubemap ConvertTexture2dToCubemap(Texture2D src)
     {
         var cubedim = src.width / 4;

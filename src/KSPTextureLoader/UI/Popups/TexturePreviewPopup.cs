@@ -27,10 +27,12 @@ internal class TexturePreviewPopup : MonoBehaviour
         { null, null, CubemapFace.PositiveY, null },
     };
 
+    const int ArrayGridCols = 4;
+
     bool owned = true;
     TextureHandle handle;
     Texture texture;
-    Texture2D[] cubemapFaceTextures;
+    Texture2D[] sliceTextures;
     string exception;
 
     [SerializeField]
@@ -351,12 +353,22 @@ internal class TexturePreviewPopup : MonoBehaviour
 
         if (texture != null)
         {
-            infoLabel.text = $"{texture.width}x{texture.height} {texture.graphicsFormat}";
-
-            if (texture is Cubemap cubemap)
+            if (texture is Texture2DArray array)
+            {
+                infoLabel.text =
+                    $"{array.width}x{array.height}x{array.depth} {array.graphicsFormat}";
+                ShowArray(array);
+            }
+            else if (texture is Cubemap cubemap)
+            {
+                infoLabel.text = $"{texture.width}x{texture.height} {texture.graphicsFormat}";
                 ShowCubemap(cubemap);
+            }
             else
+            {
+                infoLabel.text = $"{texture.width}x{texture.height} {texture.graphicsFormat}";
                 ShowTexture(texture);
+            }
         }
         else if (exception != null)
         {
@@ -378,11 +390,11 @@ internal class TexturePreviewPopup : MonoBehaviour
     {
         textureContainer.SetActive(false);
 
-        cubemapFaceTextures = new Texture2D[cubemapFaceImages.Length];
+        sliceTextures = new Texture2D[cubemapFaceImages.Length];
         for (int i = 0; i < cubemapFaceImages.Length; i++)
         {
             var faceTex = TextureUtils.ExtractCubemapFace(cubemap, CubemapFaceOrder[i]);
-            cubemapFaceTextures[i] = faceTex;
+            sliceTextures[i] = faceTex;
             cubemapFaceImages[i].texture = faceTex;
             cubemapFaceImages[i].enabled = true;
         }
@@ -390,14 +402,95 @@ internal class TexturePreviewPopup : MonoBehaviour
         cubemapGrid.SetActive(true);
     }
 
+    void ShowArray(Texture2DArray array)
+    {
+        textureContainer.SetActive(false);
+
+        int depth = array.depth;
+        int rows = (depth + ArrayGridCols - 1) / ArrayGridCols;
+        float aspect = (float)array.width / array.height;
+
+        // Build the grid dynamically in the content area (same parent as textureContainer)
+        var contentArea = textureContainer.transform.parent;
+
+        var containerGo = new GameObject("ArrayGrid", typeof(RectTransform));
+        containerGo.transform.SetParent(contentArea, false);
+
+        var containerLayout = containerGo.AddComponent<LayoutElement>();
+        containerLayout.flexibleWidth = 1f;
+        containerLayout.flexibleHeight = 1f;
+
+        var gridGo = new GameObject("ArrayGridInner", typeof(RectTransform));
+        gridGo.transform.SetParent(containerGo.transform, false);
+
+        var gridFitter = gridGo.AddComponent<AspectRatioFitter>();
+        gridFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+        gridFitter.aspectRatio = (float)ArrayGridCols / rows * aspect;
+
+        var gridVlg = gridGo.AddComponent<VerticalLayoutGroup>();
+        gridVlg.childControlWidth = true;
+        gridVlg.childControlHeight = true;
+        gridVlg.childForceExpandWidth = true;
+        gridVlg.childForceExpandHeight = true;
+        gridVlg.spacing = 2f;
+
+        sliceTextures = new Texture2D[depth];
+
+        int sliceIndex = 0;
+        for (int row = 0; row < rows; row++)
+        {
+            var rowGo = new GameObject($"Row{row}", typeof(RectTransform));
+            rowGo.transform.SetParent(gridGo.transform, false);
+
+            var rowHlg = rowGo.AddComponent<HorizontalLayoutGroup>();
+            rowHlg.childControlWidth = true;
+            rowHlg.childControlHeight = true;
+            rowHlg.childForceExpandWidth = true;
+            rowHlg.childForceExpandHeight = true;
+            rowHlg.spacing = 2f;
+
+            var rowLayout = rowGo.AddComponent<LayoutElement>();
+            rowLayout.flexibleWidth = 1f;
+            rowLayout.flexibleHeight = 1f;
+
+            for (int col = 0; col < ArrayGridCols; col++)
+            {
+                var cellGo = new GameObject($"Cell_{sliceIndex}", typeof(RectTransform));
+                cellGo.transform.SetParent(rowGo.transform, false);
+
+                var cellLayout = cellGo.AddComponent<LayoutElement>();
+                cellLayout.flexibleWidth = 1f;
+                cellLayout.flexibleHeight = 1f;
+
+                if (sliceIndex < depth)
+                {
+                    var imgGo = new GameObject("SliceImage", typeof(RectTransform));
+                    imgGo.transform.SetParent(cellGo.transform, false);
+
+                    var sliceImage = imgGo.AddComponent<RawImage>();
+
+                    var fitter = imgGo.AddComponent<AspectRatioFitter>();
+                    fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+                    fitter.aspectRatio = aspect;
+
+                    var sliceTex = TextureUtils.ExtractArraySlice(array, sliceIndex);
+                    sliceTextures[sliceIndex] = sliceTex;
+                    sliceImage.texture = sliceTex;
+
+                    sliceIndex++;
+                }
+            }
+        }
+    }
+
     void OnDestroy()
     {
-        if (cubemapFaceTextures != null)
+        if (sliceTextures != null)
         {
-            foreach (var faceTex in cubemapFaceTextures)
+            foreach (var sliceTex in sliceTextures)
             {
-                if (faceTex != null)
-                    Texture.Destroy(faceTex);
+                if (sliceTex != null)
+                    Texture.Destroy(sliceTex);
             }
         }
 
@@ -409,7 +502,7 @@ internal class TexturePreviewPopup : MonoBehaviour
                 Texture.Destroy(texture);
         }
 
-        cubemapFaceTextures = null;
+        sliceTextures = null;
         handle = null;
         texture = null;
     }
