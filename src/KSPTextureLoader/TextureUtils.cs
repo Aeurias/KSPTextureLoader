@@ -176,7 +176,7 @@ internal static class TextureUtils
         InternalTextureCreationFlags flags = InternalTextureCreationFlags.None
     )
     {
-        var tex = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2D));
+        var tex = (Texture2DArray)FormatterServices.GetUninitializedObject(typeof(Texture2DArray));
         if (!tex.ValidateFormat(GraphicsFormatUtility.GetTextureFormat(format)))
             return tex;
 
